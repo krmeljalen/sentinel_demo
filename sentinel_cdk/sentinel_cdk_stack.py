@@ -84,55 +84,47 @@ class SentinelCdkStack(Stack):
         # codebuild permissions to push image to ECR
         sentinel_ecr.grant_pull_push(docker_build)
 
-        # ECS Fargate prepare
-        starter_image = aws_ecs.ContainerImage.from_registry(
-            "public.ecr.aws/b4f2s5k2/project-demo-reinvent/nginx-web-app:latest"
-        )
+        # prepare ECS Fargate
+
         execution_policy = aws_iam.ManagedPolicy.from_aws_managed_policy_name(
             managed_policy_name="service-role/AmazonECSTaskExecutionRolePolicy"
         )
+
         execution_role = aws_iam.Role(
             self,
-            "sentinel",
+            "sentineliam",
             assumed_by=aws_iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
             managed_policies=[execution_policy],
             role_name="sentinel",
         )
 
-        security_group = aws_ec2.SecurityGroup(self, "sentinel", vpc=sentinel_vpc)
+        security_group = aws_ec2.SecurityGroup(self, "sentinelsg", vpc=sentinel_vpc)
 
         security_group.add_ingress_rule(
             aws_ec2.Peer.any_ipv4(), aws_ec2.Port.tcp(8000)  # Noncompliant
         )
 
+        ecs_cluster = aws_ecs.Cluster(self, "sentinelcluster", vpc=sentinel_vpc)
+
         alb_fargate_service = aws_ecs_patterns.ApplicationLoadBalancedFargateService(
             self,
-            "sentinel",
-            # task_definition=alb_task_definition,
+            "sentinellb",
             task_image_options={
-                "image": starter_image,
-                "container_name": "app",
+                "image": aws_ecs.ContainerImage.from_registry("public.ecr.aws/b4f2s5k2/project-demo-reinvent/nginx-web-app:latest"),
+                "container_name": "sentinel",
                 "execution_role": execution_role,
             },
-            # assign_public_ip=True,
+            assign_public_ip=True,
             desired_count=2,
             service_name="sentinel",
             listener_port=8000,
-            cluster=aws_ecs.Cluster.from_cluster_attributes(
-                self,
-                "sentinel",
-                cluster_name="sentinel",
-                vpc=sentinel_vpc,
-                security_groups=[security_group],
-            ),
+            cluster=ecs_cluster
         )
 
         fargateservice = alb_fargate_service.service
 
-        # pipeline stuff
+        # create the pipeline
         source_output = aws_codepipeline.Artifact()
-
-        # Create the pipeline
 
         source_action = aws_codepipeline_actions.GitHubSourceAction(
             action_name="SourceGithub",
