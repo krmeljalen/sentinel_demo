@@ -13,5 +13,5 @@ RUN poetry install --no-interaction --no-ansi -vvv
 FROM python as runtime
 ENV PATH="/app/.venv/bin:$PATH"
 COPY --from=poetry /app /app
-EXPOSE 8000
-CMD uvicorn sentinel.api:app --host 0.0.0.0 --port 8000 --reload
+EXPOSE 80
+CMD uvicorn sentinel.api:app --host 0.0.0.0 --port 80 --reload

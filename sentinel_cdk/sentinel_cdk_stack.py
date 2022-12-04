@@ -101,7 +101,7 @@ class SentinelCdkStack(Stack):
         security_group = aws_ec2.SecurityGroup(self, "sentinelsg", vpc=sentinel_vpc)
 
         security_group.add_ingress_rule(
-            aws_ec2.Peer.any_ipv4(), aws_ec2.Port.tcp(8000)  # Noncompliant
+            aws_ec2.Peer.any_ipv4(), aws_ec2.Port.tcp(80)  # Noncompliant
         )
 
         ecs_cluster = aws_ecs.Cluster(self, "sentinelcluster", vpc=sentinel_vpc)
@@ -111,13 +111,13 @@ class SentinelCdkStack(Stack):
             "sentinellb",
             task_image_options={
                 "image": aws_ecs.ContainerImage.from_registry("public.ecr.aws/b4f2s5k2/project-demo-reinvent/nginx-web-app:latest"),
-                "container_name": "sentinel",
+                "container_name": "app",
                 "execution_role": execution_role,
             },
             assign_public_ip=True,
             desired_count=2,
             service_name="sentinel",
-            listener_port=8000,
+            listener_port=80,
             cluster=ecs_cluster
         )
 
