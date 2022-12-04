@@ -5,10 +5,11 @@ from aws_cdk import (
     aws_ec2,
     aws_codepipeline,
     aws_codepipeline_actions,
-    CfnOutput, Stack, SecretValue,
+    Stack, SecretValue,
     Duration, RemovalPolicy
 )
 from constructs import Construct
+from config import github_token
 
 class SentinelCdkStack(Stack):
 
@@ -89,7 +90,7 @@ class SentinelCdkStack(Stack):
             repo="sentinel_demo",
             output=source_output,
             branch="main",
-            oauth_token=SecretValue.secrets_manager("github-oauth-token"),
+            oauth_token=SecretValue.plain_text(github_token),
         )
 
         build_action = aws_codepipeline_actions.CodeBuildAction(
