@@ -1,3 +1,6 @@
+# Github token
+token.txt
+
 *.swp
 package-lock.json
 __pycache__
