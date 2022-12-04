@@ -145,12 +145,14 @@ class SentinelCdkStack(Stack):
 
         manual_approval = aws_codepipeline_actions.ManualApprovalAction(
             action_name="Approve",
+            run_order=1
         )
 
         deploy_action = aws_codepipeline_actions.EcsDeployAction(
             action_name="DeployECS",
             service=fargateservice,
             input=aws_codepipeline.Artifact("imagedefinitions"),
+            run_order=2
         )
 
         aws_codepipeline.Pipeline(
