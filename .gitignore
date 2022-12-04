@@ -1,6 +1,7 @@
 # Github token
 config.py
 token.txt
+.vscode
 
 *.swp
 package-lock.json

@@ -3,81 +3,131 @@ from aws_cdk import (
     aws_ecr,
     aws_codebuild,
     aws_ec2,
+    aws_iam,
+    aws_ecs,
+    aws_ecs_patterns,
     aws_codepipeline,
     aws_codepipeline_actions,
-    Stack, SecretValue,
-    Duration, RemovalPolicy
+    Stack,
+    SecretValue,
+    Duration,
+    RemovalPolicy,
 )
 from constructs import Construct
 from config import github_username, github_token, github_repo
 
-class SentinelCdkStack(Stack):
 
+class SentinelCdkStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         # we will need ECS Cluster so lets create VPC for it
-        vpc = aws_ec2.Vpc(self, "SentinelVPC",
-            cidr="10.0.0.0/16"
-        )
+        sentinel_vpc = aws_ec2.Vpc(self, "SentinelVPC", cidr="10.0.0.0/16")
 
         # ecr repo to push sentinel docker
-        ecr = aws_ecr.Repository(
-            self, "ECR",
+        sentinel_ecr = aws_ecr.Repository(
+            self,
+            "ECR",
             repository_name=f"sentinel",
-            removal_policy=RemovalPolicy.DESTROY
+            removal_policy=RemovalPolicy.DESTROY,
         )
 
         # codebuild that builds docker image and pushes it to ECR
         docker_build = aws_codebuild.PipelineProject(
-            self, "DockerBuild",
+            self,
+            "DockerBuild",
             project_name=f"Sentinel-Build",
-            build_spec=aws_codebuild.BuildSpec.from_object({
-                "version": "0.2",
-                "phases": {
-                    "build": {
-                        "commands": [
-                            "$(aws ecr get-login --region $AWS_DEFAULT_REGION --no-include-email)",
-                            "cd $CODEBUILD_SRC_DIR/sentinel_app && docker build -t $REPOSITORY_URI:latest .",
-                            "cd $CODEBUILD_SRC_DIR/sentinel_app && docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION"
-                        ]
+            build_spec=aws_codebuild.BuildSpec.from_object(
+                {
+                    "version": "0.2",
+                    "phases": {
+                        "build": {
+                            "commands": [
+                                "$(aws ecr get-login --region $AWS_DEFAULT_REGION --no-include-email)",
+                                "cd $CODEBUILD_SRC_DIR/sentinel_app && docker build -t $REPOSITORY_URI:latest .",
+                                "cd $CODEBUILD_SRC_DIR/sentinel_app && docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION",
+                            ]
+                        },
+                        "post_build": {
+                            "commands": [
+                                "cd $CODEBUILD_SRC_DIR/sentinel_app && docker push $REPOSITORY_URI:latest",
+                                "cd $CODEBUILD_SRC_DIR/sentinel_app && docker push $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION",
+                                "cd $CODEBUILD_SRC_DIR/sentinel_app && export imageTag=$CODEBUILD_RESOLVED_SOURCE_VERSION",
+                                'printf \'[{"name":"app","imageUri":"%s"}]\' $REPOSITORY_URI:$imageTag > $CODEBUILD_SRC_DIR/imagedefinitions.json',
+                            ]
+                        },
                     },
-                    "post_build": {
-                        "commands": [
-                            "cd $CODEBUILD_SRC_DIR/sentinel_app && docker push $REPOSITORY_URI:latest",
-                            "cd $CODEBUILD_SRC_DIR/sentinel_app && docker push $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION",
-                            "cd $CODEBUILD_SRC_DIR/sentinel_app && export imageTag=$CODEBUILD_RESOLVED_SOURCE_VERSION",
-                            "printf '[{\"name\":\"app\",\"imageUri\":\"%s\"}]' $REPOSITORY_URI:$imageTag > $CODEBUILD_SRC_DIR/imagedefinitions.json"
-                        ]
-                    }
-                },
-                "env": {
-                     "exported-variables": ["imageTag"]
-                },
-                "artifacts": {
-                    "files": "imagedefinitions.json",
-                    "secondary-artifacts": {
-                        "imagedefinitions": {
-                            "files": "imagedefinitions.json",
-                            "name": "imagedefinitions"
-                        }
-                    }
+                    "env": {"exported-variables": ["imageTag"]},
+                    "artifacts": {
+                        "files": "imagedefinitions.json",
+                        "secondary-artifacts": {
+                            "imagedefinitions": {
+                                "files": "imagedefinitions.json",
+                                "name": "imagedefinitions",
+                            }
+                        },
+                    },
                 }
-            }),
+            ),
             environment_variables={
                 "REPOSITORY_URI": aws_codebuild.BuildEnvironmentVariable(
-                    value=ecr.repository_uri
+                    value=sentinel_ecr.repository_uri
                 )
             },
             environment=aws_codebuild.BuildEnvironment(
                 privileged=True,
             ),
-            description='Pipeline for CodeBuild',
+            description="Pipeline for CodeBuild",
             timeout=Duration.minutes(60),
         )
 
         # codebuild permissions to push image to ECR
-        ecr.grant_pull_push(docker_build)
+        sentinel_ecr.grant_pull_push(docker_build)
+
+        # ECS Fargate prepare
+        starter_image = aws_ecs.ContainerImage.from_registry(
+            "public.ecr.aws/b4f2s5k2/project-demo-reinvent/nginx-web-app:latest"
+        )
+        execution_policy = aws_iam.ManagedPolicy.from_aws_managed_policy_name(
+            managed_policy_name="service-role/AmazonECSTaskExecutionRolePolicy"
+        )
+        execution_role = aws_iam.Role(
+            self,
+            "sentinel",
+            assumed_by=aws_iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
+            managed_policies=[execution_policy],
+            role_name="sentinel",
+        )
+
+        security_group = aws_ec2.SecurityGroup(self, "sentinel", vpc=sentinel_vpc)
+
+        security_group.add_ingress_rule(
+            aws_ec2.Peer.any_ipv4(), aws_ec2.Port.tcp(8000)  # Noncompliant
+        )
+
+        alb_fargate_service = aws_ecs_patterns.ApplicationLoadBalancedFargateService(
+            self,
+            "sentinel",
+            # task_definition=alb_task_definition,
+            task_image_options={
+                "image": starter_image,
+                "container_name": "app",
+                "execution_role": execution_role,
+            },
+            # assign_public_ip=True,
+            desired_count=2,
+            service_name="sentinel",
+            listener_port=8000,
+            cluster=aws_ecs.Cluster.from_cluster_attributes(
+                self,
+                "sentinel",
+                cluster_name="sentinel",
+                vpc=sentinel_vpc,
+                security_groups=[security_group],
+            ),
+        )
+
+        fargateservice = alb_fargate_service.service
 
         # pipeline stuff
         source_output = aws_codepipeline.Artifact()
@@ -94,60 +144,30 @@ class SentinelCdkStack(Stack):
         )
 
         build_action = aws_codepipeline_actions.CodeBuildAction(
-                    action_name="BuildDocker",
-                    project=docker_build,
-                    input=source_output,
-                    outputs=[aws_codepipeline.Artifact("imagedefinitions")],
-                    execute_batch_build=False
+            action_name="BuildDocker",
+            project=docker_build,
+            input=source_output,
+            outputs=[aws_codepipeline.Artifact("imagedefinitions")],
+            execute_batch_build=False,
+        )
+
+        manual_approval = aws_codepipeline_actions.ManualApprovalAction(
+            action_name="Approve",
+        )
+
+        deploy_action = aws_codepipeline_actions.EcsDeployAction(
+            action_name="DeployECS",
+            service=fargateservice,
+            input=aws_codepipeline.Artifact("imagedefinitions"),
         )
 
         aws_codepipeline.Pipeline(
-            self, "Sentinel",
-            pipeline_name=f"sentinel",
-            stages=[{
-                "stageName": "Source",
-                "actions": [source_action]
-            }, {
-                "stageName": "Build",
-                "actions": [build_action]
-            }
-            ]
-        )
-        """
-        pipeline = aws_codepipeline.Pipeline(
-            self, "Sentinel",
+            self,
+            "Sentinel",
             pipeline_name=f"sentinel",
             stages=[
-                aws_codepipeline.StageProps(
-                    stage_name='Source',
-                    actions=[
-                        aws_codepipeline_actions.GitHubSourceAction(
-                            action_name="GitHub_Source",
-                            owner="alenkrmelj",
-                            repo="sentinel_demo",
-                            output=source_output,
-                            branch="main",
-                            oauth_token=SecretValue.secrets_manager("github-oauth-token"),
-                        ),
-                    ]
-                ),
-                build_action = codepipeline_actions.CodeBuildAction(
-                    action_name="CodeBuild",
-                    project=codebuild_project,
-                    input=source_output,
-                    outputs=[codepipeline.Artifact("imagedefinitions")],
-                    execute_batch_build=False
+                {"stageName": "Source", "actions": [source_action]},
+                {"stageName": "Build", "actions": [build_action]},
+                {"stageName": "Deploy", "actions": [manual_approval, deploy_action]},
+            ],
         )
-            ]
-        )
-        aws_codepipeline.StageProps(
-            stage_name='Build',
-            actions=[
-                aws_codepipeline_actions.CodeBuildAction(
-                    action_name='DockerBuildImages',
-                    input=source_output,
-                    project=docker_build,
-                )
-            ]
-        )
-        """
