@@ -9,7 +9,7 @@ from aws_cdk import (
     Duration, RemovalPolicy
 )
 from constructs import Construct
-from config import github_token
+from config import github_username, github_token
 
 class SentinelCdkStack(Stack):
 
@@ -86,7 +86,7 @@ class SentinelCdkStack(Stack):
 
         source_action = aws_codepipeline_actions.GitHubSourceAction(
             action_name="SourceGithub",
-            owner="alenkrmelj",
+            owner=github_username,
             repo="sentinel_demo",
             output=source_output,
             branch="main",
