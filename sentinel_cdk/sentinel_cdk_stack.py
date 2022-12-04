@@ -38,16 +38,16 @@ class SentinelCdkStack(Stack):
                     "build": {
                         "commands": [
                             "$(aws ecr get-login --region $AWS_DEFAULT_REGION --no-include-email)",
-                            "cd sentinel_app && docker build -t $REPOSITORY_URI:latest .",
-                            "cd sentinel_app && docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION"
+                            "cd $CODEBUILD_SRC_DIR/sentinel_app && docker build -t $REPOSITORY_URI:latest .",
+                            "cd $CODEBUILD_SRC_DIR/sentinel_app && docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION"
                         ]
                     },
                     "post_build": {
                         "commands": [
-                            "cd sentinel_app && docker push $REPOSITORY_URI:latest",
-                            "cd sentinel_app && docker push $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION",
-                            "cd sentinel_app && export imageTag=$CODEBUILD_RESOLVED_SOURCE_VERSION",
-                            "printf '[{\"name\":\"app\",\"imageUri\":\"%s\"}]' $REPOSITORY_URI:$imageTag > imagedefinitions.json"
+                            "cd $CODEBUILD_SRC_DIR/sentinel_app && docker push $REPOSITORY_URI:latest",
+                            "cd $CODEBUILD_SRC_DIR/sentinel_app && docker push $REPOSITORY_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION",
+                            "cd $CODEBUILD_SRC_DIR/sentinel_app && export imageTag=$CODEBUILD_RESOLVED_SOURCE_VERSION",
+                            "printf '[{\"name\":\"app\",\"imageUri\":\"%s\"}]' $REPOSITORY_URI:$imageTag > $CODEBUILD_SRC_DIR/imagedefinitions.json"
                         ]
                     }
                 },
