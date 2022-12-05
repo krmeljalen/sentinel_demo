@@ -9,6 +9,9 @@ app = FastAPI()
 class CreateAnalysisRequest(BaseModel):
     text: str
 
+@app.get("/")
+def read_root():
+    return {}
 
 @app.post("/analyze")
 def create_analysis(create_analysis_request: CreateAnalysisRequest):
