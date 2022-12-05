@@ -122,10 +122,11 @@ class SentinelCdkStack(Stack):
         )
 
         fargateservice = alb_fargate_service.service
-        alb_fargate_service.target_group.set_attribute('deregistration_delay.timeout_seconds', '1')
+        alb_fargate_service.target_group.set_attribute('deregistration_delay.timeout_seconds', '5')
         alb_fargate_service.target_group.configure_health_check(
-            interval=Duration.seconds(5),
-            healthy_threshold_count="2"
+            interval=Duration.seconds(3),
+            healthy_threshold_count=2,
+            timeout=Duration.seconds(2)
         )
         # create the pipeline
         source_output = aws_codepipeline.Artifact()
