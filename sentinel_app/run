@@ -1,3 +1,0 @@
-#!/bin/bash
-docker build . --tag sentinel
-docker run --rm -p 8000:8000 sentinel

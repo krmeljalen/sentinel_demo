@@ -11,7 +11,7 @@ class CreateAnalysisRequest(BaseModel):
 
 @app.get("/")
 def read_root():
-    return {}
+    return {"change": "me"}
 
 @app.post("/analyze")
 def create_analysis(create_analysis_request: CreateAnalysisRequest):

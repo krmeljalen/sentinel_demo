@@ -62,6 +62,5 @@ This is PoC that suffices for interview purposes. There are several issues with 
 To name just a few:
 - its good practice to have at least /health endpoint implemented in microservice. here I added index, so it's returning 200 response code for service to be considered healthy and included in loadbalancer
 - credentials should be stored in credentials manager
-- microservice was spawned in public network
 - code could be split into two parts, one that sets up whole infra and pipeline separate
 - buildspec in infrastructure code is a no-no, but convenient in this case
