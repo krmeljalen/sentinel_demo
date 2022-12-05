@@ -22,21 +22,21 @@ class SentinelCdkStack(Stack):
         super().__init__(scope, construct_id, **kwargs)
 
         # we will need ECS Cluster so lets create VPC for it
-        sentinel_vpc = aws_ec2.Vpc(self, "SentinelVPC", cidr="10.0.0.0/16")
+        sentinel_vpc = aws_ec2.Vpc(self, "sentinelvpc", cidr="10.0.0.0/16")
 
         # ecr repo to push sentinel docker
         sentinel_ecr = aws_ecr.Repository(
             self,
-            "ECR",
-            repository_name=f"sentinel",
+            "sentinelecr",
+            repository_name=f"sentinelecr",
             removal_policy=RemovalPolicy.DESTROY,
         )
 
         # codebuild that builds docker image and pushes it to ECR
         docker_build = aws_codebuild.PipelineProject(
             self,
-            "DockerBuild",
-            project_name=f"Sentinel-Build",
+            "dockerbuild",
+            project_name=f"build",
             build_spec=aws_codebuild.BuildSpec.from_object(
                 {
                     "version": "0.2",
@@ -157,7 +157,7 @@ class SentinelCdkStack(Stack):
 
         aws_codepipeline.Pipeline(
             self,
-            "Sentinel",
+            "sentinel",
             pipeline_name=f"sentinel",
             stages=[
                 {"stageName": "Source", "actions": [source_action]},
@@ -165,3 +165,5 @@ class SentinelCdkStack(Stack):
                 {"stageName": "Deploy", "actions": [manual_approval, deploy_action]},
             ],
         )
+
+        alb_fargate_service
