@@ -2,6 +2,7 @@
 config.py
 token.txt
 .vscode
+.DS_Store
 
 *.swp
 package-lock.json
