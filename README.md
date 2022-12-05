@@ -34,6 +34,7 @@ $ cdk deploy  # This will deploy whole thing
 ```
 
 Deploy should look like this, note the URL for your microservice!
+
 ![Deploy](deploy.png)
 
 # Deploy on repo change:
@@ -47,6 +48,7 @@ Once merge happens it will run pipeline in these stages:
 - Deploy to ECS Fargate
 
 Here is how it looks in AWS console:
+
 ![Pipeline](pipeline.png)
 
 # Troubleshooting:
